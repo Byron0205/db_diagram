@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Estilos base para CodeMirror dentro de la app */
+.cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.cm-scroller {
+  overflow: auto;
+  height: 100%;
+}
+
+/* React Flow: quitar bordes redondeados por defecto */
+.react-flow__node {
+  border-radius: 0;
+}
