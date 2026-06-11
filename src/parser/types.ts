@@ -13,6 +13,7 @@ export interface Column {
   isNotNull: boolean;
   isUnique: boolean;
   references?: ColumnRef;
+  description?: string; // comentario inline: col INT, -- descripción
 }
 
 export interface ForeignKey {
@@ -26,6 +27,7 @@ export interface Table {
   columns: Column[];
   primaryKey: string[];   // nombres de las columnas PK (puede ser compuesta)
   foreignKeys: ForeignKey[];
+  description?: string;   // comentario(s) inmediatamente antes del CREATE TABLE
 }
 
 export interface ParseResult {

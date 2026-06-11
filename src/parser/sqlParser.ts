@@ -21,8 +21,9 @@ import type { Column, ForeignKey, ParseResult, Table } from './types';
 // ─── Tokenizador ─────────────────────────────────────────────────────────────
 
 type TokenKind =
-  | 'IDENT'   // identificador o keyword
-  | 'STRING'  // 'literal'
+  | 'IDENT'    // identificador o keyword
+  | 'STRING'   // 'literal'
+  | 'COMMENT'  // -- texto de comentario de línea
   | 'LPAREN'
   | 'RPAREN'
   | 'COMMA'
@@ -40,9 +41,13 @@ function tokenize(sql: string): Token[] {
   let i = 0;
 
   while (i < sql.length) {
-    // Comentario de línea
+    // Comentario de línea → emitir como token COMMENT
     if (sql[i] === '-' && sql[i + 1] === '-') {
-      while (i < sql.length && sql[i] !== '\n') i++;
+      i += 2;
+      let text = '';
+      while (i < sql.length && sql[i] !== '\n') text += sql[i++];
+      const trimmed = text.trim();
+      if (trimmed) tokens.push({ kind: 'COMMENT', value: trimmed });
       continue;
     }
     // Comentario de bloque
@@ -233,7 +238,7 @@ function readColumnList(cur: Cursor): string[] {
 
 // ─── Parser principal ────────────────────────────────────────────────────────
 
-function parseCreateTable(cur: Cursor): Table {
+function parseCreateTable(cur: Cursor, tableDescription: string): Table {
   // CREATE [OR REPLACE] TABLE [IF NOT EXISTS] nombre (...)
   cur.consume(); // ya validamos que es CREATE fuera
   // OR REPLACE (PostgreSQL)
@@ -444,8 +449,12 @@ function parseCreateTable(cur: Cursor): Table {
       parsingModifiers = false;
     }
 
+    // Comentario inline antes de la coma: `col TYPE, -- descripción`  o  `col TYPE -- descripción,`
+    if (cur.peek().kind === 'COMMENT') col.description = cur.consume().value;
     columns.push(col);
     cur.consumeIf('COMMA');
+    // Comentario inline después de la coma: `col TYPE, -- descripción`
+    if (!col.description && cur.peek().kind === 'COMMENT') col.description = cur.consume().value;
   }
 
   // Cerrar el paréntesis
@@ -463,6 +472,7 @@ function parseCreateTable(cur: Cursor): Table {
     columns,
     primaryKey: [...new Set(tablePrimaryKey)],
     foreignKeys: tableForeignKeys,
+    ...(tableDescription ? { description: tableDescription } : {}),
   };
 }
 
@@ -473,19 +483,27 @@ export function parseSql(sql: string): ParseResult {
   const cur = new Cursor(tokens);
   const tables: Table[] = [];
   const errors: string[] = [];
+  const pendingComments: string[] = [];
 
   while (!cur.done) {
     const t = cur.peek();
-    if (t.kind === 'IDENT' && t.value.toUpperCase() === 'CREATE') {
+    if (t.kind === 'COMMENT') {
+      // Acumular comentarios consecutivos como posible descripción de la siguiente tabla
+      pendingComments.push(cur.consume().value);
+    } else if (t.kind === 'SEMICOLON') {
+      cur.consume(); // los puntos y coma no cortan el bloque de comentarios previos
+    } else if (t.kind === 'IDENT' && t.value.toUpperCase() === 'CREATE') {
       try {
-        const table = parseCreateTable(cur);
+        const table = parseCreateTable(cur, pendingComments.join('\n'));
         tables.push(table);
       } catch (e) {
         errors.push(String(e));
         cur.skipToNextCreate();
       }
+      pendingComments.length = 0;
     } else {
-      cur.consume(); // skip tokens que no son CREATE
+      cur.consume();
+      pendingComments.length = 0; // cualquier otro token rompe el bloque de comentarios
     }
   }
 

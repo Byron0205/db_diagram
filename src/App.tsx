@@ -1,44 +1,50 @@
-/**
- * Componente raíz de la SPA.
- * Layout dividido en dos paneles:
- *   - Izquierda: editor SQL (CodeMirror) con autoguardado en localStorage
- *   - Derecha:   canvas de diagrama (React Flow) con actualización en vivo
- */
-
 import { useMemo, useState } from 'react';
 import { SqlEditor } from './components/SqlEditor';
 import { DiagramCanvas } from './components/DiagramCanvas';
+import { TabBar } from './components/TabBar';
+import { HelpModal } from './components/HelpModal';
 import { useDebounce } from './hooks/useDebounce';
-import { useLocalStorage } from './hooks/useLocalStorage';
+import { useTabs } from './hooks/useTabs';
 import { parseSql } from './parser/sqlParser';
-import { EXAMPLE_SCHEMA } from './data/exampleSchema';
 
-// Ancho del panel izquierdo en píxeles (se puede ajustar arrastrando en el futuro)
-const EDITOR_PANEL_WIDTH = 380;
+const EDITOR_PANEL_WIDTH = 560;
 
 export default function App() {
-  // El texto SQL se persiste en localStorage; primera vez carga el esquema de ejemplo
-  const [sqlText, setSqlText] = useLocalStorage<string>('sqldiagram-schema', EXAMPLE_SCHEMA);
+  const { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, removeTab, renameTab } =
+    useTabs();
 
   // Debounce de 400ms para no parsear en cada pulsación de tecla
-  const debouncedSql = useDebounce(sqlText, 400);
+  const debouncedSql = useDebounce(activeTab.sql, 400);
 
-  // Parseamos el SQL debounced para obtener tablas y errores
+  // Parsear el SQL debounced para obtener tablas y errores
   const { tables, errors } = useMemo(() => parseSql(debouncedSql), [debouncedSql]);
 
-  // Estado del panel: permite mostrar/ocultar el editor en pantallas pequeñas
   const [editorOpen, setEditorOpen] = useState(true);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
-      {/* ── Panel izquierdo: editor SQL ─────────────────────────────────── */}
+      {/* ── Panel izquierdo: pestañas + editor SQL ───────────────────────── */}
       <div
         className={`flex flex-col border-r border-slate-700 shrink-0 transition-all duration-200 ${
-          editorOpen ? '' : 'w-0 overflow-hidden'
+          editorOpen ? '' : 'overflow-hidden'
         }`}
         style={{ width: editorOpen ? EDITOR_PANEL_WIDTH : 0 }}
       >
-        <SqlEditor value={sqlText} onChange={setSqlText} />
+        {/* Barra de pestañas */}
+        <TabBar
+          tabs={tabs}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onAdd={addTab}
+          onRemove={removeTab}
+          onRename={renameTab}
+        />
+
+        {/* Editor SQL */}
+        <div className="flex-1 min-h-0">
+          <SqlEditor value={activeTab.sql} onChange={updateActiveSql} />
+        </div>
       </div>
 
       {/* ── Divisor / toggle ────────────────────────────────────────────── */}
@@ -74,11 +80,20 @@ export default function App() {
               </span>
             )}
           </div>
-          {errors.length > 0 && (
-            <span className="text-xs text-amber-400">
-              ⚠ {errors.length} advertencia{errors.length > 1 ? 's' : ''} de parseo
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {errors.length > 0 && (
+              <span className="text-xs text-amber-400">
+                ⚠ {errors.length} advertencia{errors.length > 1 ? 's' : ''} de parseo
+              </span>
+            )}
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="flex items-center justify-center w-6 h-6 rounded-full border border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400 text-xs font-bold transition-colors cursor-pointer"
+              title="Ayuda — cómo usar la herramienta"
+            >
+              ?
+            </button>
+          </div>
         </div>
 
         {/* Canvas */}
@@ -86,6 +101,8 @@ export default function App() {
           <DiagramCanvas tables={tables} errors={errors} />
         </div>
       </div>
+      {/* Modal de ayuda */}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

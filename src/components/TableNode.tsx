@@ -1,8 +1,6 @@
 /**
  * Nodo custom de React Flow que representa una tabla SQL.
- * Muestra la cabecera con el nombre de la tabla y una fila por columna.
- * Cada columna FK tiene un handle source (para líneas que salen de ella).
- * La cabecera tiene un handle target (para líneas que llegan a la tabla).
+ * Muestra descripción de tabla (de comentarios SQL) y descripciones de columna.
  */
 
 import { memo } from 'react';
@@ -10,7 +8,6 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { TableNodeType } from '../diagram/buildGraph';
 import { sourceHandleId, targetHandleId } from '../diagram/buildGraph';
 
-// Icono de llave para PK
 function KeyIcon() {
   return (
     <svg className="w-3 h-3 text-amber-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -23,7 +20,6 @@ function KeyIcon() {
   );
 }
 
-// Icono de FK (enlace)
 function FkIcon() {
   return (
     <svg className="w-3 h-3 text-indigo-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -37,7 +33,7 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableNodeTy
   const { table } = data;
 
   return (
-    <div className="min-w-[200px] max-w-[300px] bg-slate-800 border border-slate-600 rounded shadow-lg select-none">
+    <div className="min-w-[220px] max-w-[320px] bg-slate-800 border border-slate-600 rounded shadow-lg select-none">
       {/* Handle target: las FK llegan a la tabla aquí */}
       <Handle
         type="target"
@@ -48,63 +44,84 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<TableNodeTy
 
       {/* Cabecera de la tabla */}
       <div className="px-3 py-2 bg-indigo-900 border-b border-slate-600 rounded-t">
-        <span className="text-sm font-bold text-white tracking-wide">{table.name}</span>
+        <span className="text-sm font-bold text-white tracking-wide block">{table.name}</span>
+        {table.description && (
+          <span className="text-[11px] text-indigo-300/70 italic leading-tight block mt-0.5 whitespace-pre-wrap">
+            {table.description}
+          </span>
+        )}
       </div>
 
       {/* Lista de columnas */}
       <div className="divide-y divide-slate-700">
         {table.columns.map((col) => (
-          <div
-            key={col.name}
-            className="relative flex items-center gap-1.5 px-3 py-1.5 text-xs group hover:bg-slate-700/50"
-          >
-            {/* Icono de PK o FK */}
-            <span className="w-4 flex items-center justify-center shrink-0">
-              {col.isPrimaryKey ? (
-                <KeyIcon />
-              ) : col.isForeignKey ? (
-                <FkIcon />
-              ) : (
-                <span className="w-3" />
-              )}
-            </span>
-
-            {/* Nombre de la columna */}
-            <span
-              className={`font-medium truncate ${
-                col.isPrimaryKey
-                  ? 'text-amber-300'
-                  : col.isForeignKey
-                  ? 'text-indigo-300'
-                  : 'text-slate-200'
-              }`}
+          <div key={col.name} className="group">
+            <div
+              className="relative flex items-center gap-1.5 px-3 py-1.5 text-xs hover:bg-slate-700/50"
+              title={col.description}
             >
-              {col.name}
-            </span>
+              {/* Icono de PK o FK */}
+              <span className="w-4 flex items-center justify-center shrink-0">
+                {col.isPrimaryKey ? (
+                  <KeyIcon />
+                ) : col.isForeignKey ? (
+                  <FkIcon />
+                ) : (
+                  <span className="w-3" />
+                )}
+              </span>
 
-            {/* Tipo de dato */}
-            <span className="ml-auto text-slate-500 shrink-0 pl-2">{col.type}</span>
+              {/* Nombre de la columna */}
+              <span
+                className={`font-medium truncate ${
+                  col.isPrimaryKey
+                    ? 'text-amber-300'
+                    : col.isForeignKey
+                    ? 'text-indigo-300'
+                    : 'text-slate-200'
+                }`}
+              >
+                {col.name}
+              </span>
 
-            {/* NOT NULL indicator */}
-            {col.isNotNull && !col.isPrimaryKey && (
-              <span className="text-slate-600 text-[9px] shrink-0">NN</span>
-            )}
+              {/* Tipo de dato */}
+              <span className="ml-auto text-slate-500 shrink-0 pl-2">{col.type}</span>
 
-            {/* Handle source: las FK salen de la columna FK */}
-            {col.isForeignKey && (
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={sourceHandleId(table.name, col.name)}
-                style={{
-                  background: '#6366f1',
-                  width: 8,
-                  height: 8,
-                  right: -5,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                }}
-              />
+              {/* NOT NULL indicator */}
+              {col.isNotNull && !col.isPrimaryKey && (
+                <span className="text-slate-600 text-[9px] shrink-0">NN</span>
+              )}
+
+              {/* Indicador de que tiene descripción */}
+              {col.description && (
+                <span className="text-indigo-500/60 text-[9px] shrink-0" title={col.description}>
+                  ●
+                </span>
+              )}
+
+              {/* Handle source: las FK salen de esta columna */}
+              {col.isForeignKey && (
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={sourceHandleId(table.name, col.name)}
+                  style={{
+                    background: '#6366f1',
+                    width: 8,
+                    height: 8,
+                    right: -5,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Descripción de columna expandida bajo la fila */}
+            {col.description && (
+              <div className="hidden group-hover:block px-3 pb-1.5 text-[10px] text-slate-400/70 italic bg-slate-700/30 -mt-px">
+                {col.description}
+              </div>
             )}
           </div>
         ))}
