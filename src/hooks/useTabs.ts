@@ -83,6 +83,25 @@ export function useTabs() {
     setActiveId(newTab.id);
   }, [tabs, setTabs, setActiveId]);
 
+  /**
+   * Crea una nueva pestaña con un SQL dado.
+   * Si `name` está vacío, intenta derivarlo del primer CREATE TABLE encontrado.
+   */
+  const addTabWithSql = useCallback(
+    (name: string, sql: string) => {
+      let tabName = name.trim();
+      if (!tabName) {
+        const match = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?[`"[\s]?(\w+)/i.exec(sql);
+        tabName = match ? match[1] : `Esquema ${tabs.length + 1}`;
+      }
+      const newTab: SchemaTab = { id: genId(), name: tabName, sql };
+      const next = [...tabs, newTab];
+      setTabs(next);
+      setActiveId(newTab.id);
+    },
+    [tabs, setTabs, setActiveId]
+  );
+
   const removeTab = useCallback(
     (id: string) => {
       if (tabs.length <= 1) return;
@@ -100,5 +119,5 @@ export function useTabs() {
     [tabs, setTabs]
   );
 
-  return { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, removeTab, renameTab };
+  return { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, addTabWithSql, removeTab, renameTab };
 }

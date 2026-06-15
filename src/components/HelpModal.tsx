@@ -249,6 +249,32 @@ CREATE TABLE pedidos (
             </div>
           </Section>
 
+          {/* ── IMPORTAR DESDE CLAUDE ───────────────────────────────────── */}
+          <Section title="Importar desde Claude">
+            <p className="text-xs text-slate-400 mb-3">
+              ¿Tienes una respuesta de Claude con un esquema SQL? Pégala directamente
+              — la herramienta extrae el SQL sola (prosa incluida).
+            </p>
+            <div className="text-xs space-y-0.5 mb-3">
+              <Row
+                label={<span className="text-slate-300">Botón <Code>↓ Importar</Code></span>}
+                desc="Abre el modal de importación donde pegas la respuesta de Claude. Vista previa en vivo: cuenta tablas y FK detectadas."
+              />
+              <Row
+                label={<span className="text-slate-300">Prompt reutilizable</span>}
+                desc="Dentro del modal hay un prompt listo para copiar y pegar a Claude. Garantiza SQL compatible con el parser."
+              />
+              <Row
+                label={<span className="text-slate-300">Botón <Code>🔗 Copiar enlace</Code></span>}
+                desc="Genera una URL con el esquema codificado. Ábrela en otro navegador o compártela y el diagrama se carga automáticamente."
+              />
+            </div>
+            <Tip>
+              El enlace copiado incluye el SQL codificado en el hash de la URL
+              (<Code>#import=…</Code>). No viaja por ningún servidor — todo es local.
+            </Tip>
+          </Section>
+
           {/* ── TIPS GENERALES ──────────────────────────────────────────── */}
           <Section title="Tips de uso">
             <div className="space-y-2">

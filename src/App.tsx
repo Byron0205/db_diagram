@@ -1,16 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SqlEditor } from './components/SqlEditor';
 import { DiagramCanvas } from './components/DiagramCanvas';
 import { TabBar } from './components/TabBar';
 import { HelpModal } from './components/HelpModal';
+import { ImportModal } from './components/ImportModal';
 import { useDebounce } from './hooks/useDebounce';
 import { useTabs } from './hooks/useTabs';
 import { parseSql } from './parser/sqlParser';
+import { buildShareUrl, decodeSchema } from './lib/share';
+import { copyToClipboard } from './lib/clipboard';
 
 const EDITOR_PANEL_WIDTH = 560;
 
 export default function App() {
-  const { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, removeTab, renameTab } =
+  const { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, addTabWithSql, removeTab, renameTab } =
     useTabs();
 
   // Debounce de 400ms para no parsear en cada pulsación de tecla
@@ -19,8 +22,34 @@ export default function App() {
   // Parsear el SQL debounced para obtener tablas y errores
   const { tables, errors } = useMemo(() => parseSql(debouncedSql), [debouncedSql]);
 
-  const [editorOpen, setEditorOpen] = useState(true);
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [editorOpen, setEditorOpen]   = useState(true);
+  const [helpOpen, setHelpOpen]       = useState(false);
+  const [importOpen, setImportOpen]   = useState(false);
+  const [linkCopied, setLinkCopied]   = useState(false);
+
+  // Importar desde deep-link (#import=<base64>) al montar la app
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash.startsWith('#import=')) {
+      const encoded = hash.slice('#import='.length);
+      const sql = decodeSchema(encoded);
+      if (sql) {
+        addTabWithSql('', sql);
+        history.replaceState(null, '', location.pathname);
+      }
+    }
+    // Solo al montar; addTabWithSql es estable (useCallback)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleCopyLink() {
+    const url = buildShareUrl(activeTab.sql);
+    const ok = await copyToClipboard(url);
+    if (ok) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -80,12 +109,33 @@ export default function App() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {errors.length > 0 && (
               <span className="text-xs text-amber-400">
                 ⚠ {errors.length} advertencia{errors.length > 1 ? 's' : ''} de parseo
               </span>
             )}
+            {/* Botón Copiar enlace */}
+            <button
+              onClick={handleCopyLink}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors cursor-pointer ${
+                linkCopied
+                  ? 'bg-emerald-800 border-emerald-600 text-emerald-200'
+                  : 'border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400'
+              }`}
+              title="Copia un enlace para compartir o abrir este esquema en el diagramador"
+            >
+              {linkCopied ? '✓ Enlace copiado' : '🔗 Copiar enlace'}
+            </button>
+            {/* Botón Importar */}
+            <button
+              onClick={() => setImportOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400 text-xs transition-colors cursor-pointer"
+              title="Importar esquema desde una respuesta de Claude"
+            >
+              ↓ Importar
+            </button>
+            {/* Botón Ayuda */}
             <button
               onClick={() => setHelpOpen(true)}
               className="flex items-center justify-center w-6 h-6 rounded-full border border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400 text-xs font-bold transition-colors cursor-pointer"
@@ -103,6 +153,15 @@ export default function App() {
       </div>
       {/* Modal de ayuda */}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {/* Modal de importación */}
+      {importOpen && (
+        <ImportModal
+          activeTabName={activeTab.name}
+          onNewTab={addTabWithSql}
+          onReplaceActive={updateActiveSql}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
     </div>
   );
 }
