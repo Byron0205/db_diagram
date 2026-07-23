@@ -21,6 +21,7 @@ No hay suite de tests configurada. La verificación es manual ejecutando `npm ru
 - **React Flow 12** (`@xyflow/react`) — canvas de diagrama con nodos custom.
 - **dagre** (`@dagrejs/dagre`) — auto-layout dirigido para posicionamiento inicial de nodos.
 - **html-to-image** — exportación del canvas a PNG.
+- **lz-string** — compresión de esquemas SQL para URLs de compartir.
 
 ### Restricciones del compilador relevantes
 `tsconfig.app.json` tiene `erasableSyntaxOnly: true` y `noUnusedLocals/Parameters: true`.
@@ -51,6 +52,18 @@ No hay suite de tests configurada. La verificación es manual ejecutando `npm ru
 
 El estado de posiciones manuales del usuario se mantiene en un `useRef<Map>` dentro de `DiagramCanvas` y se preserva entre regeneraciones del diagrama; solo se resetea al pulsar "Re-acomodar".
 
+### Flujo de importación
+
+```
+[ImportModal] → pegar texto → extractSql()  ← src/lib/extractSql.ts
+                                    ↓
+                              SQL extraído → parseSql() → vista previa en vivo
+                                    ↓ (al confirmar)
+                              onNewTab / onReplaceActive → useTabs
+```
+
+`extractSql()` tiene tres niveles de prioridad: bloques ` ```sql ` → bloques sin etiqueta con `CREATE TABLE` → texto completo si contiene `CREATE TABLE`.
+
 ### Parser (`src/parser/`)
 
 Pipeline: `tokenize()` → `Cursor` → `parseCreateTable()` → `parseSql()`.
@@ -64,8 +77,16 @@ Pipeline: `tokenize()` → `Cursor` → `parseCreateTable()` → `parseSql()`.
 Los nodos de React Flow se tipan como `TableNodeType = Node<{ table: Table }, 'tableNode'>` (no como `NodeData` directo). Esto es obligatorio para que `NodeProps<TableNodeType>` resuelva correctamente en `TableNode.tsx`.
 
 El ID de cada nodo es el nombre de la tabla. Los handle IDs siguen el patrón:
-- Source (FK sale): `col-src-{tableName}-{colName}`
-- Target (FK llega): `col-tgt-{tableName}`
+- Source (FK sale): `col-src-{tableName}-{colName}` — helper `sourceHandleId()`
+- Target (FK llega): `col-tgt-{tableName}` — helper `targetHandleId()`
+
+Ambos helpers se exportan desde `buildGraph.ts` y los usa `TableNode.tsx` para registrar los handles.
+
+### Utilidades (`src/lib/`)
+
+- **`share.ts`** — `encodeSchema` / `decodeSchema` (lz-string + URI-safe base64, con fallback a base64 plano para URLs antiguas) y `buildShareUrl` que genera `origin + pathname + #import=<encoded>`. El deep-link se procesa en el `useEffect` de montaje de `App.tsx`.
+- **`extractSql.ts`** — extrae SQL de texto libre o markdown con las tres prioridades descritas arriba.
+- **`clipboard.ts`** — `copyToClipboard(text)` con fallback a `execCommand('copy')` para entornos HTTP (sin HTTPS, `navigator.clipboard` no está disponible). Úsalo siempre en lugar de llamar directamente a `navigator.clipboard`.
 
 ### Persistencia (`src/hooks/useTabs.ts`)
 
@@ -78,3 +99,4 @@ El ID de cada nodo es el nombre de la tabla. Los handle IDs siguen el patrón:
 - **Idioma**: código en inglés (nombres de variables, tipos), UI y comentarios en español.
 - **Estilos**: exclusivamente clases Tailwind en los componentes. No hay módulos CSS ni archivos `.css` adicionales salvo `src/index.css` (solo la directiva de Tailwind + overrides mínimos para CodeMirror y React Flow).
 - **Nodos custom de React Flow**: siempre usar `Node<Data, 'nodeType'>` como tipo base y registrarlos en `nodeTypes` con `as const` en el `type` del nodo al construirlos en `buildGraph.ts`.
+- **Portapapeles**: usar siempre `copyToClipboard` de `src/lib/clipboard.ts`; nunca `navigator.clipboard` directamente (falla en HTTP sin fallback).
