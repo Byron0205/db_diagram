@@ -6,8 +6,29 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { Table } from '../parser/types';
 
+export interface TableGroup {
+  name: string;
+  color: string;
+}
+
+// Datos del nodo. Los campos más allá de `table` son estado de UI transitorio
+// (resaltado, colapso, agrupación) que DiagramCanvas inyecta en tiempo de
+// render — buildGraph() solo produce el campo `table`.
+export interface TableNodeData extends Record<string, unknown> {
+  table: Table;
+  collapsed?: boolean;
+  dimmed?: boolean;
+  selected?: boolean;
+  group?: TableGroup | null;
+  existingGroups?: string[];
+  groupPickerOpen?: boolean;
+  onToggleCollapse?: (tableName: string) => void;
+  onSetGroup?: (tableName: string, group: string | null) => void;
+  onToggleGroupPicker?: (tableName: string) => void;
+}
+
 // Tipo completo del nodo (React Flow v12 requiere Node<Data, NodeType>)
-export type TableNodeType = Node<{ table: Table }, 'tableNode'>;
+export type TableNodeType = Node<TableNodeData, 'tableNode'>;
 
 /**
  * Handle id por columna:

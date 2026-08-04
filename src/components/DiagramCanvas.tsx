@@ -13,23 +13,44 @@ import {
   useEdgesState,
   useReactFlow,
   type Edge,
+  type Node as RFNode,
   BackgroundVariant,
+  SelectionMode,
   ReactFlowProvider,
   Panel,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useCallback, useEffect, useRef } from 'react';
-import { toPng } from 'html-to-image';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toPng, toSvg } from 'html-to-image';
 
 import { TableNode } from './TableNode';
-import type { TableNodeType } from '../diagram/buildGraph';
+import { ExportMenu } from './ExportMenu';
+import type { TableNodeType, TableGroup } from '../diagram/buildGraph';
 import { buildGraph } from '../diagram/buildGraph';
 import { applyAutoLayout } from '../diagram/autoLayout';
+import { downloadTextFile, tablesToMarkdown, tablesToMermaid } from '../lib/exportDiagram';
 import type { Table } from '../parser/types';
 
 const nodeTypes: NodeTypes = { tableNode: TableNode };
+
+// Paleta de colores para etiquetas de grupo — se asignan por hash del nombre
+// para que el mismo nombre de grupo siempre produzca el mismo color.
+const GROUP_PALETTE = [
+  '#f97316', '#22c55e', '#3b82f6', '#ec4899',
+  '#eab308', '#14b8a6', '#a855f7', '#ef4444',
+];
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function groupColor(name: string): string {
+  return GROUP_PALETTE[hashString(name) % GROUP_PALETTE.length];
+}
 
 interface DiagramCanvasInnerProps {
   tables: Table[];
@@ -50,6 +71,36 @@ function DiagramCanvasInner({ tables, errors }: DiagramCanvasInnerProps) {
   // Solo hacer fitView en el primer render
   const isFirstRender = useRef(true);
 
+  // Resaltado de relaciones al seleccionar un nodo
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+
+  // Colapso de columnas por tabla
+  const [collapsedTables, setCollapsedTables] = useState<Set<string>>(new Set());
+
+  // Agrupación visual por color (nombre de grupo asignado por tabla)
+  const [groups, setGroups] = useState<Map<string, string>>(new Map());
+
+  // Popover de asignación de grupo: solo puede haber uno abierto a la vez.
+  // Se cierra a través de los mismos handlers de clic (onNodeClick/onPaneClick)
+  // que ya limpian el resaltado, para que "clic fuera" funcione de forma
+  // consistente sin depender de listeners manuales sobre el DOM.
+  const [groupPickerFor, setGroupPickerFor] = useState<string | null>(null);
+
+  const relayoutAll = useCallback(
+    (tablesToLayout: Table[]) => {
+      manualPositions.current.clear();
+      const { nodes: newNodes, edges: newEdges } = buildGraph(tablesToLayout, new Map());
+      const layouted = applyAutoLayout(newNodes, newEdges);
+      setNodes(layouted);
+      setEdges(newEdges);
+      setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 50);
+    },
+    [fitView, setNodes, setEdges],
+  );
+
+  // Solo se auto-posicionan las tablas nuevas (sin posición manual conocida)
+  // — las existentes conservan su posición tal cual, sin reacomodar todo el
+  // diagrama ni resetear el zoom/vista del usuario.
   useEffect(() => {
     // Guardar posiciones actuales antes de regenerar
     for (const node of getNodes()) {
@@ -80,13 +131,8 @@ function DiagramCanvasInner({ tables, errors }: DiagramCanvasInnerProps) {
   }, [tables]);
 
   const handleRelayout = useCallback(() => {
-    manualPositions.current.clear();
-    const { nodes: newNodes, edges: newEdges } = buildGraph(tables, new Map());
-    const layouted = applyAutoLayout(newNodes, newEdges);
-    setNodes(layouted);
-    setEdges(newEdges);
-    setTimeout(() => fitView({ padding: 0.1, duration: 400 }), 50);
-  }, [tables, fitView, setNodes, setEdges]);
+    relayoutAll(tables);
+  }, [tables, relayoutAll]);
 
   const handleExportPng = useCallback(async () => {
     const el = reactFlowWrapper.current?.querySelector<HTMLElement>('.react-flow__viewport');
@@ -105,20 +151,148 @@ function DiagramCanvasInner({ tables, errors }: DiagramCanvasInnerProps) {
     }
   }, []);
 
+  const handleExportSvg = useCallback(async () => {
+    const el = reactFlowWrapper.current?.querySelector<HTMLElement>('.react-flow__viewport');
+    if (!el) return;
+    try {
+      const dataUrl = await toSvg(el, { backgroundColor: '#0f172a' });
+      const a = document.createElement('a');
+      a.download = 'schema-diagram.svg';
+      a.href = dataUrl;
+      a.click();
+    } catch (err) {
+      console.error('Error al exportar SVG:', err);
+    }
+  }, []);
+
+  const handleExportMermaid = useCallback(() => {
+    downloadTextFile('schema-diagram.mmd', tablesToMermaid(tables), 'text/plain');
+  }, [tables]);
+
+  const handleExportMarkdown = useCallback(() => {
+    downloadTextFile('schema-diagram.md', tablesToMarkdown(tables), 'text/markdown');
+  }, [tables]);
+
+  const toggleCollapse = useCallback((tableName: string) => {
+    setCollapsedTables((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableName)) next.delete(tableName);
+      else next.add(tableName);
+      return next;
+    });
+  }, []);
+
+  const setTableGroup = useCallback((tableName: string, group: string | null) => {
+    setGroups((prev) => {
+      const next = new Map(prev);
+      if (group) next.set(tableName, group);
+      else next.delete(tableName);
+      return next;
+    });
+  }, []);
+
+  const toggleGroupPicker = useCallback((tableName: string) => {
+    setGroupPickerFor((prev) => (prev === tableName ? null : tableName));
+  }, []);
+
+  const onNodeClick = useCallback((event: React.MouseEvent, node: RFNode) => {
+    // Ctrl/Cmd(+Shift)+clic alimenta la multi-selección nativa de React Flow
+    // (grupo de arrastre) — es ortogonal al resaltado de relaciones de una
+    // sola tabla, así que no debe tocar selectedTable en ese caso.
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    setSelectedTable((prev) => (prev === node.id ? null : node.id));
+    setGroupPickerFor(null);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setSelectedTable(null);
+    setGroupPickerFor(null);
+  }, []);
+
+  // Tablas conectadas a la seleccionada (incluyéndola), para resaltar
+  const connectedSet = useMemo(() => {
+    if (!selectedTable) return null;
+    const set = new Set<string>([selectedTable]);
+    for (const edge of edges) {
+      if (edge.source === selectedTable) set.add(edge.target);
+      if (edge.target === selectedTable) set.add(edge.source);
+    }
+    return set;
+  }, [selectedTable, edges]);
+
+  const existingGroupNames = useMemo(() => Array.from(new Set(groups.values())).sort(), [groups]);
+
+  const displayNodes = useMemo<TableNodeType[]>(
+    () =>
+      nodes.map((n) => {
+        const groupName = groups.get(n.id);
+        const group: TableGroup | null = groupName ? { name: groupName, color: groupColor(groupName) } : null;
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            collapsed: collapsedTables.has(n.id),
+            dimmed: connectedSet !== null && !connectedSet.has(n.id),
+            selected: n.id === selectedTable,
+            group,
+            existingGroups: existingGroupNames,
+            groupPickerOpen: n.id === groupPickerFor,
+            onToggleCollapse: toggleCollapse,
+            onSetGroup: setTableGroup,
+            onToggleGroupPicker: toggleGroupPicker,
+          },
+        };
+      }),
+    [
+      nodes,
+      collapsedTables,
+      connectedSet,
+      selectedTable,
+      groups,
+      existingGroupNames,
+      groupPickerFor,
+      toggleCollapse,
+      setTableGroup,
+      toggleGroupPicker,
+    ],
+  );
+
+  const displayEdges = useMemo<Edge[]>(
+    () =>
+      edges.map((e) => {
+        const isHighlighted = selectedTable !== null && (e.source === selectedTable || e.target === selectedTable);
+        const isDimmed = selectedTable !== null && !isHighlighted;
+        return {
+          ...e,
+          animated: isHighlighted,
+          style: {
+            ...e.style,
+            opacity: isDimmed ? 0.15 : 1,
+            strokeWidth: isHighlighted ? 2.5 : 1.5,
+          },
+        };
+      }),
+    [edges, selectedTable],
+  );
+
   return (
     <div ref={reactFlowWrapper} className="w-full h-full bg-slate-950">
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.1 }}
         minZoom={0.1}
         maxZoom={2.5}
-        deleteKeyCode={null}
-        selectionKeyCode={null}
+        deleteKeyCode={null} // sin feature de borrar nodos aún — Backspace no debe eliminar
+        selectionMode={SelectionMode.Partial}
+        // selectionKeyCode se deja en su default ('Shift'): Shift+arrastre dibuja
+        // el recuadro de selección; el clic-y-arrastre simple sigue siendo pan.
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -152,17 +326,29 @@ function DiagramCanvasInner({ tables, errors }: DiagramCanvasInnerProps) {
             </svg>
             Re-acomodar
           </button>
-          <button
-            onClick={() => void handleExportPng()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-indigo-700 hover:bg-indigo-600 text-white rounded border border-indigo-500 transition-colors cursor-pointer"
-            title="Exportar diagrama como PNG"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            Exportar PNG
-          </button>
+          <ExportMenu
+            items={[
+              { label: 'Imagen PNG', onClick: () => void handleExportPng() },
+              { label: 'Imagen SVG', onClick: () => void handleExportSvg() },
+              { label: 'Mermaid (.mmd)', onClick: handleExportMermaid },
+              { label: 'Documentación (.md)', onClick: handleExportMarkdown },
+            ]}
+          />
         </Panel>
+
+        {/* Leyenda de grupos */}
+        {existingGroupNames.length > 0 && (
+          <Panel position="bottom-left">
+            <div className="bg-slate-800/90 border border-slate-600 rounded p-2 text-xs text-slate-300 space-y-1">
+              {existingGroupNames.map((name) => (
+                <div key={name} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: groupColor(name) }} />
+                  <span className="truncate max-w-[140px]">{name}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
 
         {/* Indicador de errores de parseo */}
         {errors.length > 0 && (

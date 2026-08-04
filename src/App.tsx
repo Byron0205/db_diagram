@@ -1,26 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SqlEditor } from './components/SqlEditor';
+import { FlowchartEditor } from './components/FlowchartEditor';
 import { DiagramCanvas } from './components/DiagramCanvas';
+import { FlowchartCanvas } from './components/FlowchartCanvas';
 import { TabBar } from './components/TabBar';
 import { HelpModal } from './components/HelpModal';
 import { ImportModal } from './components/ImportModal';
 import { useDebounce } from './hooks/useDebounce';
 import { useTabs } from './hooks/useTabs';
 import { parseSql } from './parser/sqlParser';
+import { parseFlowchart } from './flowchart/flowchartParser';
 import { buildShareUrl, decodeSchema } from './lib/share';
 import { copyToClipboard } from './lib/clipboard';
 
 const EDITOR_PANEL_WIDTH = 560;
 
 export default function App() {
-  const { tabs, activeTab, activeId, setActiveId, updateActiveSql, addTab, addTabWithSql, removeTab, renameTab } =
+  const { tabs, activeTab, activeId, setActiveId, updateActiveContent, addTab, addTabWithSql, removeTab, renameTab } =
     useTabs();
 
-  // Debounce de 400ms para no parsear en cada pulsación de tecla
-  const debouncedSql = useDebounce(activeTab.sql, 400);
+  const isSqlTab = activeTab.kind === 'sql-schema';
 
-  // Parsear el SQL debounced para obtener tablas y errores
-  const { tables, errors } = useMemo(() => parseSql(debouncedSql), [debouncedSql]);
+  // Debounce de 400ms para no parsear en cada pulsación de tecla
+  const debouncedContent = useDebounce(activeTab.content, 400);
+
+  // Se parsean ambos tipos siempre (barato dado el tamaño típico de input);
+  // solo se usa/muestra el que corresponde al tipo de la pestaña activa.
+  const { tables, errors: sqlErrors } = useMemo(() => parseSql(debouncedContent), [debouncedContent]);
+  const { diagram, errors: flowErrors } = useMemo(() => parseFlowchart(debouncedContent), [debouncedContent]);
+  const errors = isSqlTab ? sqlErrors : flowErrors;
 
   const [editorOpen, setEditorOpen]   = useState(true);
   const [helpOpen, setHelpOpen]       = useState(false);
@@ -43,7 +51,7 @@ export default function App() {
   }, []);
 
   async function handleCopyLink() {
-    const url = buildShareUrl(activeTab.sql);
+    const url = buildShareUrl(activeTab.content);
     const ok = await copyToClipboard(url);
     if (ok) {
       setLinkCopied(true);
@@ -70,9 +78,13 @@ export default function App() {
           onRename={renameTab}
         />
 
-        {/* Editor SQL */}
+        {/* Editor */}
         <div className="flex-1 min-h-0">
-          <SqlEditor value={activeTab.sql} onChange={updateActiveSql} />
+          {isSqlTab ? (
+            <SqlEditor value={activeTab.content} onChange={updateActiveContent} />
+          ) : (
+            <FlowchartEditor value={activeTab.content} onChange={updateActiveContent} />
+          )}
         </div>
       </div>
 
@@ -100,12 +112,21 @@ export default function App() {
         {/* Barra superior del canvas */}
         <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700 shrink-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold text-slate-200">SQL Schema Diagram</h1>
-            {tables.length > 0 && (
+            <h1 className="text-sm font-semibold text-slate-200">
+              {isSqlTab ? 'SQL Schema Diagram' : 'Diagrama de flujo'}
+            </h1>
+            {isSqlTab && tables.length > 0 && (
               <span className="text-xs text-slate-500">
                 {tables.length} tabla{tables.length !== 1 ? 's' : ''}
                 {' · '}
                 {tables.reduce((acc, t) => acc + t.foreignKeys.length, 0)} FK
+              </span>
+            )}
+            {!isSqlTab && diagram.nodes.length > 0 && (
+              <span className="text-xs text-slate-500">
+                {diagram.nodes.length} nodo{diagram.nodes.length !== 1 ? 's' : ''}
+                {' · '}
+                {diagram.edges.length} conexi{diagram.edges.length !== 1 ? 'ones' : 'ón'}
               </span>
             )}
           </div>
@@ -115,26 +136,30 @@ export default function App() {
                 ⚠ {errors.length} advertencia{errors.length > 1 ? 's' : ''} de parseo
               </span>
             )}
-            {/* Botón Copiar enlace */}
-            <button
-              onClick={handleCopyLink}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors cursor-pointer ${
-                linkCopied
-                  ? 'bg-emerald-800 border-emerald-600 text-emerald-200'
-                  : 'border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400'
-              }`}
-              title="Copia un enlace para compartir o abrir este esquema en el diagramador"
-            >
-              {linkCopied ? '✓ Enlace copiado' : '🔗 Copiar enlace'}
-            </button>
-            {/* Botón Importar */}
-            <button
-              onClick={() => setImportOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400 text-xs transition-colors cursor-pointer"
-              title="Importar esquema desde una respuesta de Claude"
-            >
-              ↓ Importar
-            </button>
+            {isSqlTab && (
+              <>
+                {/* Botón Copiar enlace */}
+                <button
+                  onClick={handleCopyLink}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-colors cursor-pointer ${
+                    linkCopied
+                      ? 'bg-emerald-800 border-emerald-600 text-emerald-200'
+                      : 'border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400'
+                  }`}
+                  title="Copia un enlace para compartir o abrir este esquema en el diagramador"
+                >
+                  {linkCopied ? '✓ Enlace copiado' : '🔗 Copiar enlace'}
+                </button>
+                {/* Botón Importar */}
+                <button
+                  onClick={() => setImportOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-600 text-slate-400 hover:text-slate-100 hover:border-slate-400 text-xs transition-colors cursor-pointer"
+                  title="Importar esquema desde una respuesta de Claude"
+                >
+                  ↓ Importar
+                </button>
+              </>
+            )}
             {/* Botón Ayuda */}
             <button
               onClick={() => setHelpOpen(true)}
@@ -148,7 +173,11 @@ export default function App() {
 
         {/* Canvas */}
         <div className="flex-1 min-h-0">
-          <DiagramCanvas tables={tables} errors={errors} />
+          {isSqlTab ? (
+            <DiagramCanvas tables={tables} errors={sqlErrors} />
+          ) : (
+            <FlowchartCanvas diagram={diagram} errors={flowErrors} />
+          )}
         </div>
       </div>
       {/* Modal de ayuda */}
@@ -158,7 +187,7 @@ export default function App() {
         <ImportModal
           activeTabName={activeTab.name}
           onNewTab={addTabWithSql}
-          onReplaceActive={updateActiveSql}
+          onReplaceActive={updateActiveContent}
           onClose={() => setImportOpen(false)}
         />
       )}

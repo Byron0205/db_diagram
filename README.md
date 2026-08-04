@@ -1,73 +1,43 @@
-# React + TypeScript + Vite
+# SQL Schema Diagram
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SPA para pegar/escribir sentencias `CREATE TABLE` y visualizar el esquema como un
+diagrama entidad-relación interactivo, en tiempo real y 100% en el navegador
+(sin backend — todo vive en `localStorage`).
 
-Currently, two official plugins are available:
+## Funcionalidades principales
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Editor SQL** con resaltado de sintaxis (CodeMirror 6) y parser propio tolerante
+  a errores (soporta múltiples dialectos: MySQL, PostgreSQL, SQL Server, SQLite).
+- **Diagrama interactivo** (React Flow) con auto-layout (dagre), reacomodo manual
+  y automático al detectar cambios estructurales, exportación a PNG.
+- **Pestañas** para mantener varios esquemas en paralelo, persistidas en `localStorage`.
+- **Importación inteligente** desde texto libre o respuestas de Claude (extrae
+  bloques ` ```sql ` o detecta `CREATE TABLE` en prosa).
+- **Compartir por URL**: el esquema se comprime (lz-string) y viaja en el hash
+  de la URL — no requiere servidor.
+- **Documentación desde comentarios SQL**: los comentarios `--` antes de un
+  `CREATE TABLE` o al final de una columna se muestran en el diagrama.
 
-## React Compiler
+## Comandos
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev       # servidor de desarrollo (Vite, HMR)
+npm run build     # type-check (tsc -b) + build de producción
+npm run lint      # ESLint
+npm run preview   # sirve el último build de producción
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+No hay suite de tests configurada todavía. La verificación es manual ejecutando
+`npm run dev` (ver `ROADMAP.md` → sección "Técnico / deuda").
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Stack
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Vite 8 + React 19 + TypeScript 6 · Tailwind CSS 4 · CodeMirror 6 · React Flow 12 ·
+dagre · html-to-image · lz-string.
+
+## Documentación del proyecto
+
+- **`CLAUDE.md`** — arquitectura, flujo de datos, convenciones de código. Léelo
+  antes de tocar el parser o el diagrama.
+- **`ROADMAP.md`** — ideas y mejoras pendientes, organizadas por área.

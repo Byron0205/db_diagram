@@ -22,14 +22,14 @@ Detectar y visualizar `ENUM('a','b','c')` mostrando los valores permitidos en el
 
 ## Diagrama
 
-### Resaltado de relaciones al seleccionar una tabla
-Al hacer clic en un nodo, resaltar las aristas y los nodos conectados directamente (con opacidad reducida en el resto). React Flow expone `onNodeClick` y el estado de selección; es una mejora de UX de alto impacto con poca implementación.
+### ✅ Resaltado de relaciones al seleccionar una tabla (implementado)
+Clic en un nodo resalta las aristas y tablas conectadas (opacidad reducida en el resto); clic en el fondo limpia la selección. Ver `DiagramCanvas.tsx` (`onNodeClick`/`onPaneClick`, `connectedSet`).
 
-### Colapsar/expandir columnas en un nodo
-Botón en la cabecera del nodo para mostrar solo nombre + PK/FK, ocultando el resto de columnas. Útil en esquemas grandes con tablas anchas.
+### ✅ Colapsar/expandir columnas en un nodo (implementado)
+Botón chevron en la cabecera de `TableNode` oculta la lista de columnas. Los handles de las columnas FK se mantienen montados (agrupados bajo la cabecera) mientras está colapsado para no romper las aristas existentes.
 
-### Agrupación visual por módulo
-Permitir arrastrar tablas a "grupos" (contenedores de React Flow) para separar módulos del sistema visualmente. El estado de grupos se persistiría en `localStorage` junto con las posiciones.
+### ✅ Agrupación visual por módulo (implementado, versión simplificada)
+Implementado como etiquetado por color en lugar de contenedores arrastrables de React Flow: cada tabla puede asignarse a un grupo (nombre libre) desde un botón en la cabecera del nodo, con color derivado por hash del nombre y leyenda en el canvas. Los contenedores arrastrables (agrupar por posición, no solo por color) quedan como posible mejora futura si se necesita organización espacial además de visual. El estado de grupos no se persiste todavía en `localStorage` — pendiente si se requiere entre sesiones.
 
 ### Ocultar tablas del diagrama sin borrarlas del SQL
 Checkbox o menú contextual por nodo para excluir una tabla del canvas temporalmente. El SQL no cambia, solo el renderizado.
@@ -41,17 +41,17 @@ Campo de búsqueda en la barra superior que resalta o hace zoom sobre el nodo cu
 
 ## Importación y exportación
 
-### Importar archivo `.sql` desde disco
-Botón "Abrir archivo" en el modal de importación que lee un `.sql` local con la File API. Evita tener que copiar y pegar scripts largos.
+### ✅ Importar archivo `.sql` desde disco (implementado)
+Botón "📂 Abrir archivo .sql" en `ImportModal.tsx` que lee un archivo local con la File API y llena el textarea de importación.
 
-### Exportar a SVG
-`html-to-image` ya expone `toSvg()`. Añadir la opción junto al PNG actual permite exportar diagramas vectoriales escalables.
+### ✅ Exportar a SVG (implementado)
+Menú "Exportar" en `DiagramCanvas.tsx` con opción SVG vía `toSvg()` de `html-to-image`, junto a PNG.
 
-### Exportar a Mermaid
-Generar el diagrama en sintaxis `erDiagram` de Mermaid a partir del modelo `Table[]`. Útil para incrustar en Markdown de GitHub o Notion.
+### ✅ Exportar a Mermaid (implementado)
+`src/lib/exportDiagram.ts` → `tablesToMermaid()` genera sintaxis `erDiagram` a partir de `Table[]`, descargable como `.mmd` desde el menú Exportar.
 
-### Exportar documentación a Markdown
-Recorrer `Table[]` y generar un `.md` con secciones por tabla, listado de columnas y sus descripciones extraídas de los comentarios SQL. Aprovecha directamente el campo `column.description` que ya parsea el sistema.
+### ✅ Exportar documentación a Markdown (implementado)
+`src/lib/exportDiagram.ts` → `tablesToMarkdown()` genera un `.md` con tabla de columnas y descripciones (de los comentarios SQL) por cada tabla, descargable desde el menú Exportar.
 
 ---
 

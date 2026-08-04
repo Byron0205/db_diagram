@@ -9,7 +9,7 @@
  * Sección plegable con el prompt reutilizable para Claude.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { extractSql } from '../lib/extractSql';
 import { parseSql } from '../parser/sqlParser';
 import { CLAUDE_PROMPT } from '../data/claudePrompt';
@@ -39,6 +39,15 @@ export function ImportModal({ activeTabName, onNewTab, onReplaceActive, onClose 
   const [tabName, setTabName]   = useState('');
   const [promptOpen, setPromptOpen] = useState(false);
   const [copied, setCopied]     = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo después
+    if (!file) return;
+    const text = await file.text();
+    setRaw(text);
+  }
 
   // Cerrar con Escape
   useEffect(() => {
@@ -117,9 +126,25 @@ export function ImportModal({ activeTabName, onNewTab, onReplaceActive, onClose 
 
           {/* ── Textarea ────────────────────────────────────────────── */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              Respuesta de Claude
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300">
+                Respuesta de Claude
+              </label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs text-slate-400 hover:text-slate-200 underline decoration-dotted cursor-pointer"
+              >
+                📂 Abrir archivo .sql
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".sql,.txt,text/plain"
+                onChange={(e) => void handleFileChange(e)}
+                className="hidden"
+              />
+            </div>
             <textarea
               className="w-full h-44 bg-slate-900 border border-slate-600 rounded p-3 text-xs text-slate-300 font-mono resize-none outline-none focus:border-indigo-500 placeholder:text-slate-600"
               placeholder={`Pega aquí la respuesta completa de Claude.\nPuede incluir texto explicativo y bloques \`\`\`sql.\nEl SQL se extrae solo.`}

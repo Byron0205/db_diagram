@@ -289,13 +289,15 @@ CREATE TABLE pedidos (
                 se reconocen y se ignoran sin romper el parseo.
               </Tip>
               <Tip>
-                Al re-acomodar el diagrama, las posiciones que hayas ajustado manualmente
-                se resetean. Úsalo cuando el diagrama se desordene mucho.
+                Al re-acomodar el diagrama (manualmente o automático) las posiciones que
+                hayas ajustado a mano se resetean.
               </Tip>
               <Tip>
-                Las posiciones que arrastras manualmente se <strong className="text-slate-200">conservan</strong> entre
-                regeneraciones del diagrama: agregar columnas o nuevas tablas no mueve
-                lo que ya tenías ubicado.
+                Las posiciones que arrastras manualmente se <strong className="text-slate-200">conservan</strong> mientras
+                solo edites detalles cosméticos (comentarios, formato). Si cambias la
+                estructura del esquema (agregar/quitar tablas, columnas o llaves), el
+                diagrama se <strong className="text-slate-200">reacomoda automáticamente</strong> al
+                dejar de escribir.
               </Tip>
             </div>
           </Section>
